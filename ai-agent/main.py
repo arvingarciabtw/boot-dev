@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from call_function import available_functions, call_function
+from prompts import system_prompt
+
 
 def main():
     parser = argparse.ArgumentParser(description="AI Code Assistant")
@@ -29,6 +32,9 @@ def generate_content(client, messages, verbose):
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=messages,
+        config=types.GenerateContentConfig(
+            tools=[available_functions], system_instruction=system_prompt
+        ),
     )
     if not response.usage_metadata:
         raise RuntimeError("Gemini API response appears to be malformed")
@@ -36,8 +42,32 @@ def generate_content(client, messages, verbose):
     if verbose:
         print("Prompt tokens:", response.usage_metadata.prompt_token_count)
         print("Response tokens:", response.usage_metadata.candidates_token_count)
-    print("Response:")
-    print(response.text)
+
+    if not response.function_calls:
+        print("Response:")
+        print(response.text)
+        return
+
+
+    func_results = []
+    for function_call in response.function_calls:
+        result = call_function(function_call, verbose)
+        if len(result.parts) == 0:
+            raise Exception("whoops")
+
+        func_res = result.parts[0].function_response
+        if func_res is None:
+            raise Exception("whoops, nothing in function response")
+
+        res = func_res.response
+        if res is None:
+            raise Exception("whoops, nothing in response")
+
+        func_results.append(result.parts[0])
+
+        if verbose:
+            print(f"-> {res}")
+
 
 
 if __name__ == "__main__":
