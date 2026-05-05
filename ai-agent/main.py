@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 
 from dotenv import load_dotenv
 from google import genai
@@ -25,7 +26,13 @@ def main():
     if args.verbose:
         print(f"User prompt: {args.user_prompt}\n")
 
-    generate_content(client, messages, args.verbose)
+    for _ in range(20):
+        done = generate_content(client, messages, args.verbose)
+        if done:
+            break
+    else:
+        print("too many calls, exiting...")
+        sys.exit(1)
 
 
 def generate_content(client, messages, verbose):
@@ -43,10 +50,14 @@ def generate_content(client, messages, verbose):
         print("Prompt tokens:", response.usage_metadata.prompt_token_count)
         print("Response tokens:", response.usage_metadata.candidates_token_count)
 
+    if response.candidates:
+        for candidate in response.candidates:
+            messages.append(candidate.content)
+
     if not response.function_calls:
         print("Response:")
         print(response.text)
-        return
+        return True
 
 
     func_results = []
@@ -67,6 +78,8 @@ def generate_content(client, messages, verbose):
 
         if verbose:
             print(f"-> {res}")
+
+    messages.append(types.Content(role="user", parts=func_results))
 
 
 
